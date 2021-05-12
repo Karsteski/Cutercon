@@ -59,21 +59,24 @@ class Cutercon(object):
         # providing two-way communication between client and server.
         self.cutercon_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.host, self.port))
-        self._sendData(PacketType.SERVERDATA_AUTH, self.password)
+        self._sendData(PacketType.Login, self.password)
 
     def disconnect(self):
-
+        if self.cutercon_socket is not None:
+            self.socket.close()
+            self.cutercon_socket = None
 
     def _readData(self, length):
-        
-    
+        data = b""
+
+        # Ensures all incoming bytes are read.
+        while len(data) < length:
+            data += self.socket.recv(length - len(data))
+        return data
+
     def _sendData(self, outputType, outputData):
 
-    
     def command(self, command):
-
-    
-
 
 
 class CuterconQt(QWidget):
