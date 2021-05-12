@@ -15,12 +15,18 @@ class PacketType(IntEnum):
     """
     Packet type field is a 32-bit little endian integer,
     indicating the purpose of the packet.
-    The value repetition is not an error.
     """
-    SERVERDATA_RESPONSE_VALUE = 0
-    SERVERDATA_EXECCOMMAND = 2
-    SERVERDATA_AUTH_RESPONSE = 2
-    SERVERDATA_AUTH = 3
+    # Incoming payload is the output of the command. Commands can return nothing.
+    CommandResponse = 0
+
+    # Outgoing payload is command to be run, e.g. "time set 0".
+    Command = 2
+
+    # Outgoing payload is the RCON password set by the server.
+    # Server returns packet w/ the same request ID upon success.
+    # The return packet will be type 2 (Command)
+    # A response with a request ID of -1 indicates a wrong password.
+    Login = 3
 
 
 class CuterconException(Exception):
