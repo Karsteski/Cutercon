@@ -1,4 +1,5 @@
 /.vscode
+/__pycache__
 
 # Python Virtual Environment
 /cutercon-venv
