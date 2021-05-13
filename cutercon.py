@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from enum import IntEnum
 import socket
 import select
@@ -9,7 +10,7 @@ from PyQt6.QtGui import QIcon
 
 # Temp globals for testing...
 HOST = "192.168.0.10"
-PASSWORD = "password"
+PASSWORD = "passwor"
 PORT = 25575
 
 
@@ -65,7 +66,7 @@ class Cutercon(object):
         Call disconnect() after finishing with the socket!
         """
         self.cuterconSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.host, self.port))
+        self.cuterconSocket.connect((self.host, self.port))
         self._sendData(PacketType.Login, self.password)
 
     def disconnect(self):
@@ -73,7 +74,7 @@ class Cutercon(object):
         Always close socket after finishing!
         """
         if self.cuterconSocket is not None:
-            self.socket.close()
+            self.cuterconSocket.close()
             self.cuterconSocket = None
 
     def _readData(self, length):
@@ -81,11 +82,11 @@ class Cutercon(object):
 
         # Ensures all incoming bytes are read.
         while len(data) < length:
-            data += self.socket.recv(length - len(data))
+            data += self.cuterconSocket.recv(length - len(data))
         return data
 
     def _sendData(self, outgoingPacketType, outgoingPacketData):
-        if self.socket is None:
+        if self.cuterconSocket is None:
             raise CuterconException("A socket must be connected before sending data.")
 
         INITIAL_BYTE = 0
@@ -111,17 +112,13 @@ class Cutercon(object):
 
             # Note that unpack returns a tuple even for one item.
             # The empty items are "thrown" away.
-            (incomingPayloadLength,) = struct.unpack(
-                "<i", self._readData(BYTES_IN_32BIT_INT)
-            )
+            (incomingPayloadLength,) = struct.unpack("<i", self._readData(BYTES_IN_32BIT_INT))
             incomingPayload = self._readData(incomingPayloadLength)
-            incomingPayloadID, incomingPayloadType = struct.unpack(
-                "<ii", incomingPayload[:BYTES_IN_ID_AND_TYPE_FIELD]
-            )
+            incomingPayloadID, incomingPayloadType = struct.unpack("<ii", incomingPayload[:BYTES_IN_ID_AND_TYPE_FIELD])
             incomingDataPartial, incomingPayloadPadding = (
                 incomingPayload[BYTES_IN_ID_AND_TYPE_FIELD:-2],
+                incomingPayload[-2:],
             )
-            incomingPayload[-2:]
 
             # Sanity checking
             if incomingPayloadPadding != b"\x00\x00":
@@ -169,9 +166,13 @@ class CuterconQt(QWidget):
 
 if __name__ == "__main__":
     # Perhaps wrap below in Run() and Exit()
-    app = QApplication([])
+    # app = QApplication([])
 
-    window = CuterconQt()
-    window.show()
+    # window = CuterconQt()
+    # window.show()
 
-    sys.exit(app.exec())
+    # sys.exit(app.exec())
+
+    with Cutercon(HOST, PASSWORD, PORT) as rcon:
+        print("# Connecting to %s:%i..." % (HOST, PORT))
+        rcon.command("say Hallo Welt")
