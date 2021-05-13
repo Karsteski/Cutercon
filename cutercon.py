@@ -10,7 +10,7 @@ from PyQt6.QtGui import QIcon
 
 # Temp globals for testing...
 HOST = "192.168.0.10"
-PASSWORD = "passwor"
+PASSWORD = "password"
 PORT = 25575
 
 
@@ -129,11 +129,9 @@ class Cutercon(object):
                 raise CuterconException("Authentication failed: Wrong password!")
 
             # Store response
-
             incomingData += incomingDataPartial.decode("utf8")
 
             # Return response if no more data to receive
-
             TIMEOUT = 0.0  # A timeout value of zero specifies a poll and never blocks.
             if len(select.select([self.cuterconSocket], [], [], TIMEOUT)[0]) == 0:
                 return incomingData
@@ -154,10 +152,26 @@ class CuterconQt(QWidget):
         self.setLayout(layout)
 
         self.outputField = QTextEdit()
-        self.inputField = QLineEdit(returnPressed=self.mirrorText)
+        self.inputField = QLineEdit(returnPressed=self.sendCommand)
+        # self.inputField = QLineEdit(returnPressed=self.mirrorText)
 
         layout.addWidget(self.outputField)
         layout.addWidget(self.inputField)
+
+    def sendCommand(self):
+        commandText = self.inputField.text()
+
+        try:
+            with Cutercon(HOST, PASSWORD, PORT) as rcon:
+                print("# Connecting to %s:%i..." % (HOST, PORT))
+                try:
+                    rcon.command(commandText)
+                except (ConnectionResetError, ConnectionAbortedError):
+                    print("Server connection termined, perhaps it crashed or was stopped...")
+        except ConnectionRefusedError:
+            print("The server refused the connection!")
+        except ConnectionError as error:
+            print(error)
 
     def mirrorText(self):
         inputText = self.inputField.text()
@@ -166,13 +180,9 @@ class CuterconQt(QWidget):
 
 if __name__ == "__main__":
     # Perhaps wrap below in Run() and Exit()
-    # app = QApplication([])
+    app = QApplication([])
 
-    # window = CuterconQt()
-    # window.show()
+    window = CuterconQt()
+    window.show()
 
-    # sys.exit(app.exec())
-
-    with Cutercon(HOST, PASSWORD, PORT) as rcon:
-        print("# Connecting to %s:%i..." % (HOST, PORT))
-        rcon.command("say Hallo Welt")
+    sys.exit(app.exec())
