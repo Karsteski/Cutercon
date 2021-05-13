@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 from enum import IntEnum
+from queue import Queue
 import socket
 import select
 import struct
 import sys
 
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget, QLineEdit, QTextEdit
-from PyQt6.QtGui import QIcon
 
-# Temp globals for testing...
+# Set these constants before running the script.
 HOST = "192.168.0.10"
 PASSWORD = "password"
 PORT = 25575
 
+# Set the maximum number of recent commands to be displayed.
+MAX_QUEUE_SIZE = 50
+
 
 class PacketType(IntEnum):
     """
-    Packet type field is a 32-bit little endian integer,
-    indicating the purpose of the packet.
+    Packet type field is a 32-bit little endian integer, indicating the purpose of the packet.
     """
 
     # Incoming payload is the output of the command. Commands can return nothing.
@@ -28,7 +30,7 @@ class PacketType(IntEnum):
 
     # Outgoing payload is the RCON password set by the server.
     # Server returns packet w/ the same request ID upon success.
-    # The return packet will be type 2 (Command)
+    # The return packet will be type 2 (Command).
     # A response with a request ID of -1 indicates a wrong password.
     Login = 3
 
@@ -49,20 +51,22 @@ class Cutercon(object):
         self.password = password
         self.port = port
 
+    # If using Context Manager.
     def __enter__(self):
         self.connect()
         return self
 
+    # If using Context Manager.
     # Guarantees socket is closed upon program exit.
     def __exit__(self, exceptionType, exceptionValue, exceptionTraceback):
         self.disconnect()
+        print("Disconnecting from %s:%i..." % (self.host, self.port))
 
     def connect(self):
         """
-        Create new socket w/ the address & protocol family (AF_INET is cute).
+        Create new socket w/ the address & protocol family (AF_INET is IPv4).
         SOCK_STREAM is a type of socket known as a stream socket,
         providing two-way communication between client and server.
-
         Call disconnect() after finishing with the socket!
         """
         self.cuterconSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -103,10 +107,10 @@ class Cutercon(object):
         self.cuterconSocket.send(outgoingPayloadLength + outgoingPayload)
 
         # Now read response packets.
-        incomingData = ""  # Must be defined outside loop for concatenation
+        incomingData = ""  # Must be defined outside loop for concatenation.
 
         while True:
-            # First, read a packet
+            # First, read a packet.
             BYTES_IN_32BIT_INT = 4
             BYTES_IN_ID_AND_TYPE_FIELD = 8
 
@@ -145,44 +149,77 @@ class CuterconQt(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Cutercon")
-        self.setWindowIcon(QIcon("./minecraft-logo.ico"))
         self.resize(500, 500)  # width, height
 
         layout = QVBoxLayout()
         self.setLayout(layout)
 
         self.outputField = QTextEdit()
-        self.inputField = QLineEdit(returnPressed=self.sendCommand)
-        # self.inputField = QLineEdit(returnPressed=self.mirrorText)
+        self.outputField.setReadOnly(True)
+
+        self.inputField = QLineEdit()
+        self.inputField.setPlaceholderText("Enter command...")
 
         layout.addWidget(self.outputField)
         layout.addWidget(self.inputField)
 
-    def sendCommand(self):
-        commandText = self.inputField.text()
+        self.inputField.returnPressed.connect(self.sendCommand)
+        self.inputField.returnPressed.connect(self.printText)
 
+        self.commandQueue = Queue(MAX_QUEUE_SIZE)
+
+        self.connection = Cutercon(HOST, PASSWORD, PORT)
         try:
-            with Cutercon(HOST, PASSWORD, PORT) as rcon:
-                print("# Connecting to %s:%i..." % (HOST, PORT))
-                try:
-                    rcon.command(commandText)
-                except (ConnectionResetError, ConnectionAbortedError):
-                    print("Server connection termined, perhaps it crashed or was stopped...")
+            self.connection.connect()
+            self.printText("Connected to %s:%i..." % (HOST, PORT))
         except ConnectionRefusedError:
             print("The server refused the connection!")
         except ConnectionError as error:
             print(error)
 
-    def mirrorText(self):
-        inputText = self.inputField.text()
-        self.outputField.setText("Output: {0}".format(inputText))
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exceptionType, exceptionValue, exceptionTraceback):
+        self.connection.disconnect()
+        print("Disconnecting from %s:%i..." % (HOST, PORT))
+
+    def sendCommand(self):
+        commandText = self.inputField.text()
+
+        try:
+            self.connection.command(commandText)
+        except (ConnectionResetError, ConnectionAbortedError):
+            print("Server connection terminated, perhaps it crashed or was stopped...")
+
+    def addToQueue(self, command):
+        if self.commandQueue.full():
+            self.commandQueue.get()
+            self.commandQueue.put(command)
+        else:
+            self.commandQueue.put(command)
+
+    def printText(self, programText=None):
+        if programText is None:
+            inputText = self.inputField.text()
+        else:
+            inputText = programText
+
+        self.addToQueue(inputText)
+        # Erase sent command to improve UX.
+        self.inputField.clear()
+
+        # Clear screen before printing queue.
+        self.outputField.clear()
+
+        # Now print to window.
+        for command in list(self.commandQueue.queue):
+            self.outputField.append("$ {0}".format(command))
 
 
 if __name__ == "__main__":
-    # Perhaps wrap below in Run() and Exit()
     app = QApplication([])
 
-    window = CuterconQt()
-    window.show()
-
-    sys.exit(app.exec())
+    with CuterconQt() as window:
+        window.show()
+        sys.exit(app.exec())
